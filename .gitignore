@@ -17,5 +17,7 @@ capture/
 attachments/
 reference/
 
-# macOS clutter
+# macOS and editor clutter
 .DS_Store
+*.swp
+*~
