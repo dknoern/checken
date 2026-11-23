@@ -1,0 +1,17 @@
+# Rust build output (cargo build, and the Windows/Linux builds in target/cross)
+/target/
+
+# Installers made by scripts/make-dmg.sh and scripts/make-windows-linux.sh
+/dist/
+
+# Screenshots and sample files from test runs (they can show your accounts)
+/shots/
+
+# Cargo.lock stays in git: Checken is an app, so its exact library versions are kept.
+
+# macOS and editor clutter
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

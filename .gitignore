@@ -1,0 +1,21 @@
+# Checken's code lives in app/ (see app/.gitignore for its build output).
+
+# Craft Anything's own records and working files for this project
+agent-session.jsonl
+build-activity.log
+feed.json
+usage.json
+craft.json
+checks/
+inbox/
+investigation.cany/
+pinned/
+capture/
+
+# Pictures you gave the builder: screenshots of your real accounts in Quicken
+# and Checken, so they stay out of git.
+attachments/
+reference/
+
+# macOS clutter
+.DS_Store

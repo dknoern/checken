@@ -1,0 +1,29 @@
+[package]
+name = "checken"
+version = "0.1.0"
+edition = "2024"
+
+# The program file is named "Checken" (capital C): on the Mac, the menu bar's
+# app name and the Dock's hover label come from the program's file name.
+[[bin]]
+name = "Checken"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.45", features = ["serde"] }
+eframe = "0.37.0"
+egui_extras = { version = "0.37", features = ["datepicker"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+rfd = "0.18.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+winit = { version = "0.30", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The Mac menu bar (Windows and Linux use the sidebar's ⋯ menu).
+muda = "0.21.2"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo", "NSString", "NSURL", "NSURLRequest", "NSGeometry", "NSObject"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWindow", "NSResponder", "NSView", "NSApplication", "NSGraphics", "NSRunningApplication"] }
+objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration", "WKUserContentController", "WKScriptMessageHandler", "WKScriptMessage", "WKNavigationDelegate", "WKNavigation", "WKFrameInfo", "WKUIDelegate", "WKWindowFeatures", "WKNavigationAction", "WKPreferences", "objc2-app-kit", "objc2-core-foundation", "block2"] }
