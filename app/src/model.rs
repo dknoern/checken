@@ -271,24 +271,45 @@ pub fn data_path() -> PathBuf {
     dir.join("ledger.json")
 }
 
-/// Where the data lived when the app was called Pocket Ledger.
-fn old_data_path() -> PathBuf {
-    let home = home_dir();
-    let dir = if cfg!(target_os = "macos") { home.join("Library/Application Support/Pocket Ledger") } else { home.join(".pocket-ledger") };
-    dir.join("ledger.json")
-}
-
 impl Ledger {
-    pub fn load() -> Ledger {
-        // Data saved under the app's old name is picked up (and from then on
-        // saved under the new one); the old file is left as it was.
-        let path = if data_path().exists() { data_path() } else { old_data_path() };
-        let mut l: Ledger = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_else(Ledger::sample);
+    /// The person's data from data_path(). With no data file, Checken starts
+    /// with sample accounts, transactions and budgets to explore (File > Purge
+    /// All Data can start it empty instead). It no longer looks in the old
+    /// "Pocket Ledger" folder: that data was carried over when the app was
+    /// renamed.
+    ///
+    /// A data file that can't be read is set aside as "ledger (couldn't be
+    /// read) <time>.json" before starting fresh, so a later save can never
+    /// overwrite it. `may_write` is false for screenshot runs, which change
+    /// nothing on disk.
+    pub fn load_with(may_write: bool) -> Ledger {
+        let path = data_path();
+        let mut l = match std::fs::read_to_string(&path) {
+            Ok(text) => match serde_json::from_str::<Ledger>(&text) {
+                Ok(l) => l,
+                Err(_) => {
+                    if may_write {
+                        let stamp = Local::now().format("%Y-%m-%d %H%M%S");
+                        let _ = std::fs::rename(&path, path.with_file_name(format!("ledger (couldn't be read) {stamp}.json")));
+                    }
+                    Ledger::sample()
+                }
+            },
+            Err(_) => Ledger::sample(),
+        };
         l.normalize_categories();
         l
+    }
+
+    pub fn load() -> Ledger {
+        Ledger::load_with(true)
+    }
+
+    /// A new, empty ledger: categories and saved reports to start from, no
+    /// accounts or transactions.
+    pub fn starter() -> Ledger {
+        let s = Ledger::sample();
+        Ledger { categories: s.categories, reports: s.reports, next_id: s.next_id, ..Default::default() }
     }
 
     pub fn save(&self) -> Result<(), String> {

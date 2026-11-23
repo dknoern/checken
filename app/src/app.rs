@@ -93,6 +93,8 @@ struct App {
     recent_reports: Vec<library::ReportKey>,
     menu_bar: Option<filemenu::MenuBar>,
     pending_restore: Option<filemenu::PendingRestore>,
+    /// File > Purge All Data's confirmation, while it's open.
+    pending_purge: Option<filemenu::PurgeDialog>,
     pending_import: Option<importer::PendingImport>,
     /// Duplicate imported transactions waiting for the person to confirm.
     pending_dedupe: Option<Vec<u64>>,
@@ -121,7 +123,8 @@ impl App {
             // A screenshot run never writes the person's files, bank keys included.
             crate::plaid::practice_run();
         }
-        let mut ledger = Ledger::load();
+        // A screenshot run reads the data but never changes files.
+        let mut ledger = Ledger::load_with(shot.is_none());
         // CHECKEN_PLAID_SERVER points a check run at another Plaid server.
         if let Ok(server) = std::env::var("CHECKEN_PLAID_SERVER") {
             ledger.plaid.server_url = server;
@@ -185,6 +188,7 @@ impl App {
             recent_reports: Vec::new(),
             menu_bar: None,
             pending_restore: None,
+            pending_purge: None,
             pending_import: None,
             pending_dedupe: None,
             pending_delete_account: None,
@@ -219,6 +223,10 @@ impl App {
         // CHECKEN_DELETE_ACCOUNT=<name> opens the Delete… confirmation for that account at start.
         if let Ok(name) = std::env::var("CHECKEN_DELETE_ACCOUNT") {
             app.pending_delete_account = app.ledger.accounts.iter().find(|a| a.name == name).map(|a| a.id);
+        }
+        // CHECKEN_PURGE=1 opens the Purge All Data confirmation at start (for checks).
+        if std::env::var("CHECKEN_PURGE").as_deref() == Ok("1") {
+            app.pending_purge = Some(filemenu::PurgeDialog::default());
         }
         // CHECKEN_DEDUPE=1 opens the Remove Duplicate Imports check at start.
         if std::env::var("CHECKEN_DEDUPE").as_deref() == Ok("1") {
@@ -384,6 +392,11 @@ impl App {
             if ui.button("Bank Connections (Plaid)…").clicked() {
                 ui.close();
                 self.plaid_open_settings();
+            }
+            ui.separator();
+            if ui.button(RichText::new("Purge All Data…").color(RED)).clicked() {
+                ui.close();
+                self.pending_purge = Some(filemenu::PurgeDialog::default());
             }
             ui.separator();
             if let Some(id) = self.acct_filter {
@@ -849,6 +862,7 @@ impl eframe::App for App {
         self.account_dialog(&ctx);
         self.report_dialog(&ctx);
         self.restore_dialog(&ctx);
+        self.purge_dialog(&ctx);
         self.plaid_dialogs(&ctx);
         self.import_dialog(&ctx);
         self.dedupe_dialog(&ctx);

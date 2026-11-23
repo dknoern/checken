@@ -20,5 +20,8 @@
   {"name": "transfer categories", "group": "import", "value": "Transfer, Transfer:*, Credit Card Payment, [Account]", "source": "sample export"},
   {"name": "transfer pairing window", "group": "import", "value": 3, "unit": "days", "estimated": true},
   {"name": "imported lines cleared without status column", "group": "import", "value": true, "estimated": true},
-  {"name": "scheduled lines skipped", "group": "import", "value": true, "estimated": true}
+  {"name": "scheduled lines skipped", "group": "import", "value": true, "estimated": true},
+  {"name": "sample data when no ledger file", "group": "data", "value": true, "source": "person's request 2026-11-23 (Checken design, not Quicken)"},
+  {"name": "purge requires 'can't be undone' confirmation", "group": "data", "value": true, "source": "person's request 2026-11-23 (Checken design, not Quicken)"},
+  {"name": "purge restart choices", "group": "data", "value": "Empty, With sample data", "source": "person's request 2026-11-23 (Checken design, not Quicken)"}
 ]}

@@ -153,3 +153,15 @@ with Quicken's Web Connect header):
 - No categories in the file: a payee the person categorised before gets that category when
   the money goes the same way; otherwise Uncategorized.
 - Then the same preview, duplicate check (account, date, amount) and safety copy as CSV import.
+
+## Sample data and Purge All Data (developer tool; File > Purge All Data…, ⋯ menu)
+
+- With no ledger.json in Checken's data folder, Checken starts with sample accounts and
+  transactions (saved there on the first change). A file that can't be read is renamed
+  "ledger (couldn't be read) <date>.json" and the sample is shown.
+- Purge All Data… asks first: the person must tick "I understand this can't be undone."
+  before the red Purge button works; Cancel or Escape leaves everything as it was.
+- Purging erases Checken's whole data folder (ledger, safety copies, automatic backups), then
+  starts again Empty (categories and reports only) or With sample data. Backups saved
+  elsewhere and banks connected on the Plaid server aren't touched.
+- Meant for developers clearing test data; expected to be removed in a later release.

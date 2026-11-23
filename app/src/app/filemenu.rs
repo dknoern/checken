@@ -12,6 +12,15 @@ pub struct MenuBar {
     rx: Receiver<String>,
 }
 
+/// The "Purge All Data" confirmation: nothing happens until the person ticks
+/// that they understand it can't be undone.
+#[derive(Default)]
+pub struct PurgeDialog {
+    understood: bool,
+    /// Start again with sample data instead of empty.
+    sample: bool,
+}
+
 /// A backup that was opened and is waiting for the person to confirm.
 pub struct PendingRestore {
     ledger: Ledger,
@@ -80,6 +89,9 @@ pub fn install(ctx: &egui::Context) -> Option<MenuBar> {
             &item("plaid_settings", "Bank Connections (Plaid)…", None),
             &PredefinedMenuItem::separator(),
             &item("print", "Print Report…", key(cmd, Code::KeyP)),
+            &PredefinedMenuItem::separator(),
+            // For developers clearing out test data; likely removed in later releases.
+            &item("purge_all", "Purge All Data…", None),
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::close_window(None),
         ],
@@ -154,6 +166,7 @@ impl App {
                 "import_mint_csv" => self.choose_import(super::importer::Source::Mint),
                 "import_bank_file" => self.choose_import(super::importer::Source::BankFile),
                 "dedupe_imports" => self.find_import_duplicates(),
+                "purge_all" => self.pending_purge = Some(PurgeDialog::default()),
                 "plaid_connect" => self.plaid_connect(ctx, None),
                 "plaid_refresh" => self.plaid_refresh(ctx, None),
                 "plaid_settings" => self.plaid_open_settings(),
@@ -276,5 +289,100 @@ impl App {
         if !close {
             self.pending_restore = Some(pending);
         }
+    }
+}
+
+impl App {
+    /// File > Purge All Data: asks for confirmation, then clears everything in
+    /// Checken's data folder (the ledger, every safety copy, any saved bank
+    /// key) and starts again, empty or with sample data. Meant for developers
+    /// clearing out test data.
+    pub(super) fn purge_dialog(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.pending_purge.take() else { return };
+        let mut close = false;
+        let mut go = false;
+        let width = 520.0;
+        let folder = data_path().parent().map(|p| p.display().to_string()).unwrap_or_default();
+        let frame = egui::Frame::new()
+            .fill(Color32::WHITE)
+            .corner_radius(10.0)
+            .stroke(Stroke::new(1.0, Color32::from_gray(190)))
+            .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 28, spread: 0, color: Color32::from_black_alpha(70) });
+        egui::Modal::new(egui::Id::unique("purge_dialog")).frame(frame).show(ctx, |ui| {
+            ui.set_width(width);
+            egui::Frame::new().inner_margin(Margin { left: 26, right: 26, top: 22, bottom: 18 }).show(ui, |ui| {
+                ui.set_width(width - 52.0);
+                ui.label(RichText::new("Purge All Data?").size(22.0).color(RED));
+                ui.add_space(10.0);
+                ui.label("This permanently erases every account, transaction, budget, category and report in Checken, and every safety copy and backup Checken kept in its data folder:");
+                ui.add_space(4.0);
+                ui.label(RichText::new(&folder).monospace().size(12.0).color(MUTED));
+                ui.add_space(6.0);
+                ui.label(RichText::new("Backups you saved elsewhere with Save a Backup aren't touched. Banks connected on your Plaid server stay connected there.").color(MUTED));
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    ui.label("Start again:");
+                    ui.radio_value(&mut d.sample, false, "Empty");
+                    ui.radio_value(&mut d.sample, true, "With sample data");
+                });
+                ui.add_space(8.0);
+                ui.checkbox(&mut d.understood, RichText::new("I understand this can't be undone.").strong());
+                ui.add_space(16.0);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 14.0;
+                    let b = egui::Button::new(RichText::new("Purge All Data").size(15.0).color(Color32::WHITE))
+                        .fill(if d.understood { RED } else { Color32::from_gray(190) })
+                        .stroke(Stroke::NONE)
+                        .min_size(egui::vec2(140.0, 30.0))
+                        .corner_radius(6.0);
+                    if ui.add_enabled(d.understood, b).clicked() {
+                        go = true;
+                    }
+                    if ui.add(egui::Button::new(RichText::new("Cancel").size(15.0)).min_size(egui::vec2(90.0, 30.0)).corner_radius(6.0)).clicked() {
+                        close = true;
+                    }
+                });
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            close = true;
+        }
+        if go && d.understood && !close {
+            self.purge_all(d.sample);
+            return;
+        }
+        if !close {
+            self.pending_purge = Some(d);
+        }
+    }
+
+    fn purge_all(&mut self, sample: bool) {
+        // A screenshot run never touches the person's files.
+        if self.shot.is_none() {
+            if let Some(dir) = data_path().parent() {
+                if dir.exists() {
+                    if let Err(e) = std::fs::remove_dir_all(dir) {
+                        self.status = format!("Couldn't purge the data folder: {e}");
+                        return;
+                    }
+                }
+            }
+        }
+        self.ledger = if sample { Ledger::sample() } else { Ledger::starter() };
+        self.ledger.normalize_categories();
+        self.acct_filter = None;
+        self.scope = None;
+        self.selected = None;
+        self.form = None;
+        self.cat_filter = None;
+        self.budget_buf_month = None;
+        self.report_open = None;
+        self.report_sel = None;
+        self.recent_reports.clear();
+        self.pending_import = None;
+        self.view = View::Register;
+        // Save the fresh start now, so the next launch opens it too.
+        self.dirty = true;
+        self.status = if sample { "All data purged. Started again with sample data.".into() } else { "All data purged. Checken is empty.".into() };
     }
 }
