@@ -122,6 +122,11 @@ developer convenience and may be removed in a future release.
 
 ## Installing
 
+The easiest way: download Checken from its website, **https://dknoern.github.io/checken/**,
+which always offers the newest build for macOS, Windows and Linux. The site's source is in
+`app/site/`, and the Build workflow publishes it to GitHub Pages on every push to `main`.
+
+
 Ready-made installers are attached to each run of the GitHub **Build** workflow
 (*Actions ▸ the latest run ▸ Artifacts*), and to each release when a version tag such as
 `v0.2.0` is pushed:

@@ -23,5 +23,11 @@
   {"name": "scheduled lines skipped", "group": "import", "value": true, "estimated": true},
   {"name": "sample data when no ledger file", "group": "data", "value": true, "source": "person's request 2026-11-23 (Checken design, not Quicken)"},
   {"name": "purge requires 'can't be undone' confirmation", "group": "data", "value": true, "source": "person's request 2026-11-23 (Checken design, not Quicken)"},
-  {"name": "purge restart choices", "group": "data", "value": "Empty, With sample data", "source": "person's request 2026-11-23 (Checken design, not Quicken)"}
+  {"name": "purge restart choices", "group": "data", "value": "Empty, With sample data", "source": "person's request 2026-11-23 (Checken design, not Quicken)"},
+  {"name": "bank sync price", "group": "billing", "value": 2.00, "unit": "USD per month", "source": "person's request 2026-11-23 (Checken design, not Quicken); node/billing.js BANK_SYNC_PRICE_CENTS"},
+  {"name": "subscription statuses that may sync", "group": "billing", "value": "active, trialing, past_due", "source": "node/billing.js GOOD"},
+  {"name": "payment confirmation poll interval", "group": "billing", "value": 3, "unit": "seconds", "source": "src/app/plaid_ui.rs plaid_start_checkout"},
+  {"name": "payment wait limit", "group": "billing", "value": 30, "unit": "minutes", "source": "src/app/plaid_ui.rs plaid_start_checkout"},
+  {"name": "server re-reads subscription from Stripe at most every", "group": "billing", "value": 60, "unit": "seconds", "source": "node/billing.js refresh"},
+  {"name": "webhook signature tolerance", "group": "billing", "value": 300, "unit": "seconds", "source": "node/billing.js verifySignature"}
 ]}

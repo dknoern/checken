@@ -273,7 +273,12 @@ impl App {
                 self.status = format!("Didn't restore: couldn't keep a safety copy first ({e}).");
                 return;
             }
+            // A backup from before Bank Sync keeps this Checken's subscription.
+            let key = std::mem::take(&mut self.ledger.plaid.subscriber_key);
             self.ledger = pending.ledger;
+            if self.ledger.plaid.subscriber_key.is_empty() {
+                self.ledger.plaid.subscriber_key = key;
+            }
             self.acct_filter = None;
             self.selected = None;
             self.form = None;
@@ -318,7 +323,7 @@ impl App {
                 ui.add_space(4.0);
                 ui.label(RichText::new(&folder).monospace().size(12.0).color(MUTED));
                 ui.add_space(6.0);
-                ui.label(RichText::new("Backups you saved elsewhere with Save a Backup aren't touched. Banks connected on your Plaid server stay connected there.").color(MUTED));
+                ui.label(RichText::new("Backups you saved elsewhere with Save a Backup aren't touched. Banks connected on your Plaid server stay connected there, and your Bank Sync subscription stays.").color(MUTED));
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     ui.label("Start again:");
@@ -368,7 +373,13 @@ impl App {
                 }
             }
         }
+        // The Bank Sync subscription and its server stay: they belong to the
+        // person, not to this data (the server still has the subscription).
+        let server_url = std::mem::take(&mut self.ledger.plaid.server_url);
+        let key = std::mem::take(&mut self.ledger.plaid.subscriber_key);
         self.ledger = if sample { Ledger::sample() } else { Ledger::starter() };
+        self.ledger.plaid.server_url = server_url;
+        self.ledger.plaid.subscriber_key = key;
         self.ledger.normalize_categories();
         self.acct_filter = None;
         self.scope = None;

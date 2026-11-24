@@ -4,7 +4,7 @@
 //! messages and are applied here. See crate::plaid for the details.
 
 use super::*;
-use crate::plaid::{self, Applied, BankAccount, LinkOutcome, PlaidItem, PlaidLink, SyncResult};
+use crate::plaid::{self, Access, Applied, BankAccount, Billing, Endpoint, LinkOutcome, PlaidItem, PlaidLink, SyncResult};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 /// What a bank account in a new connection should become.
@@ -23,8 +23,34 @@ pub struct ConnectDialog {
     choices: Vec<Choice>,
 }
 
+/// What to carry on with once the person has subscribed to Bank Sync.
+#[derive(Clone, Debug, PartialEq)]
+pub enum After {
+    Connect(Option<u32>),
+    ConnectFromServer,
+    Refresh(Option<String>),
+    Nothing,
+}
+
+/// The "Turn on Bank Sync" window: shown the first time a bank is connected
+/// (or updated) on a server that charges for it.
+pub struct SubscribeDialog {
+    pub billing: Billing,
+    pub after: After,
+    /// Stripe's payment page is open in the browser; waiting for it.
+    pub checkout: Option<String>,
+}
+
 pub enum Msg {
     Progress(String),
+    /// The server issued this copy of Checken its key: keep it.
+    Key(String),
+    /// Bank Sync needs a subscription first.
+    NeedSubscription(Billing, After),
+    /// Stripe's payment page is open in the browser.
+    CheckoutOpened(String),
+    /// Stripe confirmed the subscription.
+    Subscribed,
     /// Show Plaid Link (a page on 127.0.0.1) in Checken's own window.
     OpenLink(String),
     Connected { item_id: String, institution: String, accounts: Vec<BankAccount> },
@@ -58,6 +84,38 @@ pub struct PlaidUi {
     /// A check run closes the Plaid window this long after starting.
     pub test_close_after: Option<std::time::Instant>,
     ctx: Option<egui::Context>,
+    pub subscribe: Option<SubscribeDialog>,
+    /// What to do when the current job ends (after subscribing).
+    after: Option<After>,
+    /// Set when the person stops waiting for Stripe.
+    billing_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// The subscription as last read for the Bank Connections window.
+    pub billing: Option<Result<Option<Billing>, String>>,
+    billing_rx: Option<Receiver<(Result<Option<Billing>, String>, Option<String>)>>,
+}
+
+/// Before bank work: registers this Checken with the server if needed and
+/// checks its Bank Sync subscription. False means stop: the person has to
+/// subscribe first (the window for that opens) or the server didn't answer.
+fn gate(server: &mut Endpoint, after: After, say: &dyn Fn(Msg)) -> bool {
+    match plaid::check_access(server) {
+        Err(e) => {
+            say(Msg::Failed(format!("The Plaid server at {server} didn't answer: {e}")));
+            false
+        }
+        Ok((access, key)) => {
+            if let Some(k) = key {
+                say(Msg::Key(k));
+            }
+            match access {
+                Access::Ready => true,
+                Access::NeedsSubscription(b) => {
+                    say(Msg::NeedSubscription(b, after));
+                    false
+                }
+            }
+        }
+    }
 }
 
 impl App {
@@ -85,7 +143,7 @@ impl App {
     /// token; Checken only learns the connection's item id.
     pub(super) fn plaid_connect(&mut self, ctx: &egui::Context, target: Option<u32>) {
         self.plaid.target = target;
-        let server = self.ledger.plaid.server();
+        let mut server = self.ledger.plaid.endpoint();
         let wake = ctx.clone();
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.plaid.link_cancel = cancel.clone();
@@ -94,6 +152,9 @@ impl App {
                 let _ = tx.send(m);
                 wake.request_repaint();
             };
+            if !gate(&mut server, After::Connect(target), &say) {
+                return;
+            }
             let link_token = match plaid::create_link_token(&server) {
                 Ok(t) => t,
                 Err(e) => return say(Msg::Failed(format!("The Plaid server at {server} didn't answer: {e}"))),
@@ -126,7 +187,7 @@ impl App {
     /// Adds a bank the server already holds (say, one connected in the Plaid
     /// demo at localhost:3000) that Checken isn't using yet.
     pub(super) fn plaid_connect_from_server(&mut self, ctx: &egui::Context) {
-        let server = self.ledger.plaid.server();
+        let mut server = self.ledger.plaid.endpoint();
         let known: Vec<String> = self.ledger.plaid.items.iter().map(|i| i.item_id.clone()).collect();
         let wake = ctx.clone();
         self.plaid_job("Looking for banks connected on the Plaid server…", ctx, move |tx| {
@@ -134,6 +195,9 @@ impl App {
                 let _ = tx.send(m);
                 wake.request_repaint();
             };
+            if !gate(&mut server, After::ConnectFromServer, &say) {
+                return;
+            }
             let _ = plaid::hand_over_legacy_tokens(&server, &known);
             let items = match plaid::server_items(&server) {
                 Ok(v) => v,
@@ -162,7 +226,7 @@ impl App {
             self.plaid.queued = Some(only);
             return;
         }
-        let server = self.ledger.plaid.server();
+        let mut server = self.ledger.plaid.endpoint();
         let in_use: Vec<String> = self.ledger.plaid.items.iter().map(|i| i.item_id.clone()).collect();
         let wake = ctx.clone();
         let what = if items.len() == 1 { format!("Updating {} from the bank…", items[0].institution) } else { format!("Updating {} bank connections…", items.len()) };
@@ -171,6 +235,9 @@ impl App {
                 let _ = tx.send(m);
                 wake.request_repaint();
             };
+            if !gate(&mut server, After::Refresh(only), &say) {
+                return;
+            }
             // Keys an older Checken kept go to the server first (once). Keys
             // for connections that are gone are dropped, and a problem here
             // is only mentioned: the update itself goes ahead.
@@ -200,7 +267,7 @@ impl App {
             return;
         }
         self.ledger.plaid.items.retain(|i| i.item_id != item_id);
-        let server = self.ledger.plaid.server();
+        let server = self.ledger.plaid.endpoint();
         let item = item_id.to_string();
         std::thread::spawn(move || {
             let _ = plaid::remove_item(&server, &item);
@@ -219,6 +286,16 @@ impl App {
         if self.plaid.link_window.as_ref().is_some_and(|w| !w.is_open()) {
             self.plaid.link_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
             self.plaid.link_window = None;
+        }
+        if let Some(rx) = &self.plaid.billing_rx {
+            if let Ok((status, key)) = rx.try_recv() {
+                self.plaid.billing_rx = None;
+                if let Some(k) = key {
+                    self.ledger.plaid.subscriber_key = k;
+                    self.dirty = true;
+                }
+                self.plaid.billing = Some(status);
+            }
         }
         let Some(rx) = &self.plaid.rx else { return };
         let msgs: Vec<Msg> = rx.try_iter().collect();
@@ -257,15 +334,42 @@ impl App {
                     }
                 }
                 Msg::Synced { item_id, result } => self.plaid_apply(&item_id, result),
+                Msg::Key(k) => {
+                    self.ledger.plaid.subscriber_key = k;
+                    self.dirty = true;
+                }
+                Msg::NeedSubscription(billing, after) => {
+                    self.plaid.subscribe = Some(SubscribeDialog { billing, after, checkout: None });
+                }
+                Msg::CheckoutOpened(url) => {
+                    if let Some(d) = self.plaid.subscribe.as_mut() {
+                        d.checkout = Some(url);
+                    }
+                }
+                Msg::Subscribed => {
+                    let after = self.plaid.subscribe.take().map(|d| d.after).unwrap_or(After::Nothing);
+                    self.plaid.billing = None;
+                    self.status = "Bank Sync is on. Thank you!".into();
+                    self.plaid.after = Some(after);
+                }
                 Msg::Idle => {
                     if let Some(mut w) = self.plaid.link_window.take() {
                         w.close();
                     }
                     self.plaid.rx = None;
                     self.plaid.busy = None;
-                    if let (Some(only), Some(ctx)) = (self.plaid.queued.take(), self.plaid.ctx.clone()) {
+                    let after = self.plaid.after.take();
+                    if let (Some(after), Some(ctx)) = (after.clone(), self.plaid.ctx.clone()) {
+                        // Just subscribed: carry on with what the person asked for.
+                        match after {
+                            After::Connect(target) => self.plaid_connect(&ctx, target),
+                            After::ConnectFromServer => self.plaid_connect_from_server(&ctx),
+                            After::Refresh(only) => self.plaid_refresh(&ctx, only),
+                            After::Nothing => {}
+                        }
+                    } else if let (Some(only), Some(ctx)) = (self.plaid.queued.take(), self.plaid.ctx.clone()) {
                         self.plaid_refresh(&ctx, only);
-                    } else {
+                    } else if self.plaid.subscribe.is_none() || !self.plaid.failures.is_empty() {
                         self.plaid_report();
                     }
                 }
@@ -391,6 +495,169 @@ impl App {
     pub(super) fn plaid_dialogs(&mut self, ctx: &egui::Context) {
         self.plaid_connect_dialog(ctx);
         self.plaid_settings_dialog(ctx);
+        self.plaid_subscribe_dialog(ctx);
+    }
+
+    /// Opens Stripe's payment page in the browser and waits (up to 30
+    /// minutes) for Stripe to confirm, checking every few seconds; then
+    /// carries on with what the person was doing.
+    fn plaid_start_checkout(&mut self, ctx: &egui::Context) {
+        let server = self.ledger.plaid.endpoint();
+        let wake = ctx.clone();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.plaid.billing_cancel = cancel.clone();
+        self.plaid_job("Waiting for your payment with Stripe in the browser…", ctx, move |tx| {
+            let say = |m: Msg| {
+                let _ = tx.send(m);
+                wake.request_repaint();
+            };
+            let url = match plaid::checkout_url(&server) {
+                Ok(Some(u)) => u,
+                Ok(None) => return say(Msg::Subscribed),
+                Err(e) => return say(Msg::Failed(format!("Couldn't start the payment: {e}"))),
+            };
+            if let Err(e) = plaid::open_in_browser(&url) {
+                say(Msg::Failed(e));
+            }
+            say(Msg::CheckoutOpened(url));
+            let start = std::time::Instant::now();
+            while start.elapsed() < std::time::Duration::from_secs(30 * 60) {
+                for _ in 0..12 {
+                    if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+                if let Ok(Some(b)) = plaid::billing_status(&server) {
+                    if b.active {
+                        return say(Msg::Subscribed);
+                    }
+                }
+            }
+            say(Msg::Failed("Stopped waiting for the payment. If you paid, try connecting again in a minute.".into()));
+        });
+    }
+
+    /// The "Turn on Bank Sync" window.
+    fn plaid_subscribe_dialog(&mut self, ctx: &egui::Context) {
+        let Some(d) = self.plaid.subscribe.as_ref() else { return };
+        let price = d.billing.price_text();
+        let waiting = d.checkout.clone();
+        let lapsed = !matches!(d.billing.status.as_str(), "" | "none");
+        let mut subscribe = false;
+        let mut reopen = false;
+        let mut close = false;
+        let width = 560.0;
+        egui::Modal::new(egui::Id::unique("plaid_subscribe")).frame(dialog_frame()).show(ctx, |ui| {
+            ui.set_width(width);
+            egui::Frame::new().inner_margin(Margin { left: 28, right: 28, top: 24, bottom: 20 }).show(ui, |ui| {
+                ui.set_width(width - 56.0);
+                ui.label(RichText::new(if lapsed { "Renew Bank Sync" } else { "Turn on Bank Sync" }).size(22.0).color(NAVY));
+                ui.add_space(8.0);
+                ui.label(
+                    "Checken is free for everything on your computer: entering transactions, budgets, reports, and \
+                     importing Quicken, Mint, CSV and QFX/OFX files.",
+                );
+                ui.add_space(6.0);
+                ui.label(format!(
+                    "Downloading transactions straight from your bank goes through Plaid, which charges for every connected bank. \
+                     Bank Sync covers that for {price}."
+                ));
+                ui.add_space(10.0);
+                for line in [
+                    "Connect as many banks and cards as you like",
+                    "New transactions with one click (⟳ or ⌘R)",
+                    "Cancel anytime from Bank Connections",
+                ] {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("✓").color(GREEN).strong());
+                        ui.label(line);
+                    });
+                }
+                ui.add_space(10.0);
+                ui.label(RichText::new("You pay with Stripe in your web browser; Checken never sees your card.").color(MUTED));
+                ui.add_space(16.0);
+                if waiting.is_some() {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Finish paying in your browser. Checken carries on as soon as Stripe confirms.").color(NAVY));
+                    });
+                    ui.add_space(12.0);
+                }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 14.0;
+                    if waiting.is_none() {
+                        let b = egui::Button::new(RichText::new(format!("Subscribe for {price}")).size(15.0).color(Color32::WHITE))
+                            .fill(ACCENT)
+                            .stroke(Stroke::NONE)
+                            .min_size(egui::vec2(190.0, 32.0))
+                            .corner_radius(6.0);
+                        if ui.add_enabled(self.plaid.busy.is_none(), b).clicked() {
+                            subscribe = true;
+                        }
+                        if ui.add(egui::Button::new(RichText::new("Not Now").size(15.0)).min_size(egui::vec2(96.0, 32.0)).corner_radius(6.0)).clicked() {
+                            close = true;
+                        }
+                    } else {
+                        if ui.add(egui::Button::new(RichText::new("Cancel").size(15.0)).min_size(egui::vec2(96.0, 32.0)).corner_radius(6.0)).clicked() {
+                            close = true;
+                        }
+                        if ui.add(egui::Button::new(RichText::new("Open the Payment Page Again").size(15.0)).min_size(egui::vec2(96.0, 32.0)).corner_radius(6.0)).clicked() {
+                            reopen = true;
+                        }
+                    }
+                });
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            close = true;
+        }
+        if close {
+            self.plaid.billing_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.plaid.subscribe = None;
+            self.status = "Bank Sync isn't on, so no bank was connected. Everything else in Checken works as before.".into();
+        } else if reopen {
+            if let Some(url) = waiting {
+                if let Err(e) = plaid::open_in_browser(&url) {
+                    self.status = e;
+                }
+            }
+        } else if subscribe {
+            self.plaid_start_checkout(ctx);
+        }
+    }
+
+    /// Reads the subscription for the Bank Connections window, in the background.
+    fn plaid_check_billing(&mut self, ctx: &egui::Context) {
+        if self.plaid.billing_rx.is_some() || self.shot.is_some() {
+            return;
+        }
+        let (tx, rx) = channel();
+        self.plaid.billing_rx = Some(rx);
+        self.plaid.billing = None;
+        let mut server = self.ledger.plaid.endpoint();
+        let wake = ctx.clone();
+        std::thread::spawn(move || {
+            let result = plaid::check_access(&mut server).and_then(|(_, key)| plaid::billing_status(&server).map(|b| (b, key)));
+            let _ = match result {
+                Ok((b, key)) => tx.send((Ok(b), key)),
+                Err(e) => tx.send((Err(e), None)),
+            };
+            wake.request_repaint();
+        });
+    }
+
+    /// Stripe's customer portal in the browser.
+    fn plaid_manage_subscription(&mut self, ctx: &egui::Context) {
+        let server = self.ledger.plaid.endpoint();
+        let wake = ctx.clone();
+        self.plaid_job("Opening your subscription with Stripe…", ctx, move |tx| {
+            let r = plaid::portal_url(&server).and_then(|u| plaid::open_in_browser(&u));
+            if let Err(e) = r {
+                let _ = tx.send(Msg::Failed(format!("Couldn't open the subscription page: {e}")));
+            }
+            wake.request_repaint();
+        });
     }
 
     fn plaid_connect_dialog(&mut self, ctx: &egui::Context) {
@@ -564,6 +831,12 @@ impl App {
         let mut close = false;
         let mut save = false;
         let mut demo = false;
+        let mut manage = false;
+        let mut subscribe = false;
+        if self.plaid.billing.is_none() {
+            self.plaid_check_billing(ctx);
+        }
+        let billing = self.plaid.billing.clone();
         let width = 620.0;
         let conns: Vec<(String, String, Option<String>, Option<String>, usize)> = self
             .ledger
@@ -589,6 +862,34 @@ impl App {
                     );
                     ui.end_row();
                 });
+                ui.add_space(12.0);
+                ui.label(semibold("Bank Sync subscription").size(14.0).color(NAVY));
+                ui.add_space(4.0);
+                match &billing {
+                    None => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(RichText::new("Checking…").color(MUTED));
+                        });
+                    }
+                    Some(Err(e)) => {
+                        ui.label(RichText::new(format!("Couldn't check: {e}")).color(RED));
+                    }
+                    Some(Ok(None)) => {
+                        ui.label("Free on this server: it doesn't charge for Bank Sync.");
+                    }
+                    Some(Ok(Some(b))) => {
+                        ui.label(b.summary());
+                        ui.horizontal(|ui| {
+                            if b.can_manage && ui.button("Manage Subscription…").on_hover_text("Change your card, see receipts or cancel, with Stripe in your browser").clicked() {
+                                manage = true;
+                            }
+                            if b.enabled && !b.active && ui.button(format!("Subscribe ({})…", b.price_text())).clicked() {
+                                subscribe = true;
+                            }
+                        });
+                    }
+                }
                 ui.add_space(12.0);
                 ui.label(semibold("Connected banks").size(14.0).color(NAVY));
                 ui.add_space(4.0);
@@ -622,9 +923,28 @@ impl App {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             close = true;
         }
+        if manage {
+            self.plaid_manage_subscription(ctx);
+        }
+        if subscribe {
+            if let Some(Ok(Some(b))) = billing {
+                self.plaid.subscribe = Some(SubscribeDialog { billing: b, after: After::Nothing, checkout: None });
+            }
+            close = true;
+        }
+        if close {
+            // Read it again next time the window opens.
+            self.plaid.billing = None;
+        }
         if (save || demo) && !close {
             let server_t = server.trim().trim_end_matches('/').to_string();
-            self.ledger.plaid.server_url = if server_t == "http://localhost:8000" { String::new() } else { server_t };
+            let new_url = if server_t == "http://localhost:8000" { String::new() } else { server_t };
+            if new_url != self.ledger.plaid.server_url {
+                // A different server: this Checken registers with it afresh.
+                self.ledger.plaid.subscriber_key.clear();
+            }
+            self.ledger.plaid.server_url = new_url;
+            self.plaid.billing = None;
             self.dirty = true;
             if demo {
                 self.plaid_connect_from_server(ctx);

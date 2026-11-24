@@ -812,6 +812,28 @@ impl eframe::App for App {
                     self.plaid_connect_from_server(&ctx);
                 }
                 "settings" => self.plaid_open_settings(),
+                // The Bank Sync windows, with a made-up subscription (for checks and screenshots).
+                "subscribe" | "subscribe-wait" | "settings-subscribed" => {
+                    let mut b = crate::plaid::Billing {
+                        enabled: true,
+                        status: "none".into(),
+                        amount_cents: 200,
+                        currency: "usd".into(),
+                        interval: "month".into(),
+                        ..Default::default()
+                    };
+                    if what == "settings-subscribed" {
+                        b.active = true;
+                        b.status = "active".into();
+                        b.can_manage = true;
+                        b.period_end = chrono::Local::now().checked_add_months(chrono::Months::new(1)).map(|t| t.timestamp());
+                        self.plaid_open_settings();
+                        self.plaid.billing = Some(Ok(Some(b)));
+                    } else {
+                        let checkout = (what == "subscribe-wait").then(|| "https://checkout.stripe.com/".to_string());
+                        self.plaid.subscribe = Some(plaid_ui::SubscribeDialog { billing: b, after: plaid_ui::After::Nothing, checkout });
+                    }
+                }
                 "refresh" => self.plaid_refresh(&ctx, None),
                 // Opens Plaid's window and closes it after 3 s, as a person would (a check of the window).
                 "connect-close" => {

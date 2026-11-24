@@ -165,3 +165,34 @@ with Quicken's Web Connect header):
   starts again Empty (categories and reports only) or With sample data. Backups saved
   elsewhere and banks connected on the Plaid server aren't touched.
 - Meant for developers clearing test data; expected to be removed in a later release.
+
+## Bank Sync subscription (Stripe; first Connect a Bank Account, ⟳, Bank Connections)
+
+Checken stays free offline (entering, budgets, reports, CSV/Quicken/Mint/QFX/OFX imports and
+backups). Downloading from banks through Plaid costs the server owner, so on a server with Stripe
+keys it's a subscription: $2.00/month by default. One server process (the quickstart's
+node/index.js with node/billing.js) handles Plaid and Stripe.
+
+- Registration: the first bank action asks the server for a key (`POST /api/billing/register`);
+  the server keeps only its SHA-256 (`node/.data/subscribers.json`, 0600). Checken keeps it in
+  the ledger (`plaid.subscriber_key`) and sends it as `Authorization: Bearer`, passed to curl as a
+  config on its input (never on the command line). A server that doesn't know the key → register
+  again. A different server URL in Bank Connections → a new key. Purge All Data and restoring an
+  older backup keep the key (the subscription belongs to the person).
+- Check: before connecting or updating, `GET /api/billing/status`. Not subscribed → the "Turn on
+  Bank Sync" window (price, what's free, ✓ list, "You pay with Stripe in your web browser").
+  "Subscribe for $2.00/month" → `POST /api/billing/checkout` → Stripe Checkout opens in the
+  browser; Checken checks every 3 s (up to 30 min) and, once active, carries on with what the
+  person was doing (connecting, or the update). Not Now/Cancel/Escape → nothing connected.
+- Server gate: create_link_token, set_access_token and /api/items* need an active subscription
+  (active, trialing or past_due) → otherwise 402 SUBSCRIPTION_REQUIRED. Each bank belongs to the
+  Checken that connected it; banks from before subscriptions go to the first registered Checken
+  that uses one. Without a key, only programs on the server's computer, and only with billing off
+  or ALLOW_LOCAL_WITHOUT_SUBSCRIPTION=true. The Plaid demo's own endpoints answer this computer
+  only and never see subscribers' banks.
+- Confirmation: Stripe returns the browser to `/billing/done`, which checks the session with
+  Stripe and records it; the webhook `/stripe/webhook` (signature checked, 5-minute tolerance)
+  keeps it current; status re-reads the subscription from Stripe at most once a minute.
+- Bank Connections shows "Active, $2.00/month. Renews <date>." (or cancelled/ended/payment
+  problem) with Manage Subscription… (Stripe's customer portal in the browser) or Subscribe….
+- No Stripe key on the server, or an older server: Bank Sync is free, as before.

@@ -16,7 +16,14 @@
 //!   those are handed to the server once (`POST /api/items/import`) and the
 //!   file is deleted.
 //!
-//! Requests go through the Mac's own `curl`.
+//! - Bank Sync is a paid subscription (see MECHANICS.md, "Bank Sync
+//!   subscription"): each copy of Checken registers once with the server
+//!   (`POST /api/billing/register`) and sends its private key with every
+//!   request; the bank endpoints answer 402 SUBSCRIPTION_REQUIRED until the
+//!   person has subscribed through Stripe Checkout in the browser. A server
+//!   without billing (older, or without Stripe keys) works as before, free.
+//!
+//! Requests go through the system's own `curl`.
 
 use crate::model::*;
 use chrono::NaiveDate;
@@ -69,6 +76,10 @@ pub struct PlaidData {
     /// The Plaid server (blank = http://localhost:8000).
     #[serde(default)]
     pub server_url: String,
+    /// This copy of Checken's private key with that server (for Bank Sync);
+    /// blank until the server issues one.
+    #[serde(default)]
+    pub subscriber_key: String,
 }
 
 impl PlaidData {
@@ -77,8 +88,26 @@ impl PlaidData {
         if s.is_empty() { "http://localhost:8000".into() } else { s.to_string() }
     }
 
+    /// The server and this copy of Checken's key with it, for requests.
+    pub fn endpoint(&self) -> Endpoint {
+        Endpoint { url: self.server(), key: self.subscriber_key.clone() }
+    }
+
     pub fn item(&self, item_id: &str) -> Option<&PlaidItem> {
         self.items.iter().find(|i| i.item_id == item_id)
+    }
+}
+
+/// Where requests go, and the key that says which Checken is asking.
+#[derive(Clone, Debug, Default)]
+pub struct Endpoint {
+    pub url: String,
+    pub key: String,
+}
+
+impl std::fmt::Display for Endpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.url)
     }
 }
 
@@ -114,7 +143,7 @@ fn practicing() -> bool {
 /// the server couldn't take for another reason (say, it isn't running) is
 /// kept to try again. A problem here never stops an update: it's reported,
 /// and syncing carries on through the server.
-pub fn hand_over_legacy_tokens(server: &str, in_use: &[String]) -> Result<usize, String> {
+pub fn hand_over_legacy_tokens(server: &Endpoint, in_use: &[String]) -> Result<usize, String> {
     let tokens = legacy_tokens();
     if tokens.is_empty() || practicing() {
         return Ok(0);
@@ -126,7 +155,7 @@ pub fn hand_over_legacy_tokens(server: &str, in_use: &[String]) -> Result<usize,
         if !in_use.contains(&item) {
             continue;
         }
-        match request("POST", &format!("{server}/api/items/import"), Some(&json!({ "access_token": token }))) {
+        match request(server, "POST", "/api/items/import", Some(&json!({ "access_token": token }))) {
             Ok(_) => done += 1,
             Err(e) if gone(&e) => {}
             Err(e) => {
@@ -156,27 +185,53 @@ fn gone(err: &str) -> bool {
 
 // ------------------------------------------------------------- talking ---
 
-/// Sends a request to the Plaid server and returns its JSON answer, through curl.
-fn request(method: &str, url: &str, body: Option<&Value>) -> Result<Value, String> {
-    let mut args: Vec<String> = vec!["-sS".into(), "--max-time".into(), "120".into(), "-X".into(), method.into(), "-w".into(), "\n%{http_code}".into()];
-    if body.is_some() {
-        args.extend(["-H".into(), "Content-Type: application/json".into(), "--data-binary".into(), "@-".into()]);
+/// Text for a curl config file: a quoted value with its special characters escaped.
+fn curl_quote(v: &str) -> String {
+    let mut out = String::from("\"");
+    for c in v.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
     }
-    args.push(url.into());
+    out.push('"');
+    out
+}
+
+/// Sends a request to the server through curl and returns the HTTP status
+/// and the JSON answer. Everything, the key included, goes to curl as a
+/// config file on its input, so no other program can read the key from its
+/// command line.
+fn send(ep: &Endpoint, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
+    let mut cfg = String::new();
+    cfg.push_str("silent\nshow-error\nmax-time = 120\n");
+    cfg.push_str(&format!("request = {}\n", curl_quote(method)));
+    cfg.push_str("write-out = \"\\n%{http_code}\"\n");
+    if !ep.key.is_empty() {
+        cfg.push_str(&format!("header = {}\n", curl_quote(&format!("Authorization: Bearer {}", ep.key))));
+    }
+    if let Some(b) = body {
+        cfg.push_str("header = \"Content-Type: application/json\"\n");
+        cfg.push_str(&format!("data-binary = {}\n", curl_quote(&b.to_string())));
+    }
+    cfg.push_str(&format!("url = {}\n", curl_quote(&format!("{}{path}", ep.url))));
     // curl ships with macOS, Windows 10+ and most Linux systems.
     let curl = if cfg!(target_os = "macos") { "/usr/bin/curl" } else if cfg!(windows) { "curl.exe" } else { "curl" };
-    let mut child = std::process::Command::new(curl)
-        .args(&args)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Couldn't start curl ({e})."))?;
+    let mut command = std::process::Command::new(curl);
+    command.args(["-q", "-K", "-"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // no console window
+    }
+    let mut child = command.spawn().map_err(|e| format!("Couldn't start curl ({e})."))?;
     {
         let mut stdin = child.stdin.take().ok_or("curl has no input")?;
-        if let Some(b) = body {
-            stdin.write_all(b.to_string().as_bytes()).map_err(|e| e.to_string())?;
-        }
+        stdin.write_all(cfg.as_bytes()).map_err(|e| e.to_string())?;
     }
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     if !out.status.success() {
@@ -187,6 +242,18 @@ fn request(method: &str, url: &str, body: Option<&Value>) -> Result<Value, Strin
     let (body, code) = text.rsplit_once('\n').unwrap_or((&text, "0"));
     let code: u16 = code.trim().parse().unwrap_or(0);
     let v: Value = serde_json::from_str(body).unwrap_or(Value::String(body.chars().take(300).collect()));
+    Ok((code, v))
+}
+
+/// Sends a request and returns the JSON answer, or the server's (or Plaid's)
+/// message for people, with its error code in brackets.
+fn request(ep: &Endpoint, method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
+    let (code, v) = send(ep, method, path, body)?;
+    answer(code, v)
+}
+
+/// The JSON answer, or the error it carries as a message for people.
+fn answer(code: u16, v: Value) -> Result<Value, String> {
     if !(200..300).contains(&code) {
         if code == 404 && v.is_string() {
             return Err("The Plaid server needs the update that keeps bank keys on the server; restart it after updating.".into());
@@ -206,22 +273,202 @@ fn request(method: &str, url: &str, body: Option<&Value>) -> Result<Value, Strin
     Ok(v)
 }
 
+// ----------------------------------------------------------- Bank Sync ----
+
+/// The person's Bank Sync subscription, as the server sees it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Billing {
+    /// Whether this server charges for Bank Sync at all.
+    pub enabled: bool,
+    /// Whether bank work may go ahead now.
+    pub active: bool,
+    /// Stripe's word for it: none, active, trialing, past_due, canceled...
+    pub status: String,
+    /// When the paid month ends (Unix seconds).
+    pub period_end: Option<i64>,
+    /// Cancelled: it stops at `period_end`.
+    pub cancel_at_period_end: bool,
+    /// Stripe's customer portal is available (a subscription was set up).
+    pub can_manage: bool,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub interval: String,
+}
+
+impl Billing {
+    /// "$2.00/month".
+    pub fn price_text(&self) -> String {
+        let amount = self.amount_cents as f64 / 100.0;
+        let interval = if self.interval.is_empty() { "month" } else { &self.interval };
+        if self.currency.is_empty() || self.currency.eq_ignore_ascii_case("usd") {
+            format!("${amount:.2}/{interval}")
+        } else {
+            format!("{amount:.2} {}/{interval}", self.currency.to_uppercase())
+        }
+    }
+
+    /// The end of the paid month, as a date.
+    pub fn period_end_text(&self) -> Option<String> {
+        let t = chrono::DateTime::from_timestamp(self.period_end?, 0)?;
+        Some(t.with_timezone(&chrono::Local).format("%B %-d, %Y").to_string())
+    }
+
+    /// One line for the Bank Connections window.
+    pub fn summary(&self) -> String {
+        if !self.enabled {
+            return "Free on this server: it doesn't charge for Bank Sync.".into();
+        }
+        let price = self.price_text();
+        match (self.active, self.status.as_str()) {
+            (true, "past_due") => format!("Active ({price}), but the last payment didn't go through: update your card with Manage Subscription."),
+            (true, _) if self.cancel_at_period_end => match self.period_end_text() {
+                Some(d) => format!("Cancelled: Bank Sync works until {d}."),
+                None => "Cancelled: Bank Sync works until the end of the paid month.".into(),
+            },
+            (true, _) => match self.period_end_text() {
+                Some(d) => format!("Active, {price}. Renews {d}."),
+                None => format!("Active, {price}."),
+            },
+            (false, "none" | "") => format!("Not subscribed. Bank Sync is {price}."),
+            (false, "incomplete" | "incomplete_expired") => format!("The first payment didn't finish. Bank Sync is {price}."),
+            (false, _) => format!("Ended. Subscribe again to keep updating from your banks ({price})."),
+        }
+    }
+}
+
+fn parse_billing(v: &Value) -> Billing {
+    let price = v.get("price");
+    Billing {
+        enabled: v.get("billing_enabled").and_then(Value::as_bool).unwrap_or(false),
+        active: v.get("active").and_then(Value::as_bool).unwrap_or(false),
+        status: v.get("status").and_then(Value::as_str).unwrap_or_default().to_string(),
+        period_end: v.get("current_period_end").and_then(Value::as_i64),
+        cancel_at_period_end: v.get("cancel_at_period_end").and_then(Value::as_bool).unwrap_or(false),
+        can_manage: v.get("can_manage").and_then(Value::as_bool).unwrap_or(false),
+        amount_cents: price.and_then(|p| p.get("amount")).and_then(Value::as_i64).unwrap_or(200),
+        currency: price.and_then(|p| p.get("currency")).and_then(Value::as_str).unwrap_or("usd").to_string(),
+        interval: price.and_then(|p| p.get("interval")).and_then(Value::as_str).unwrap_or("month").to_string(),
+    }
+}
+
+/// Asks the server for a key for this copy of Checken. None: the server has
+/// no billing (an older one), so none is needed.
+fn register(ep: &Endpoint) -> Result<Option<String>, String> {
+    let (code, v) = send(&Endpoint { url: ep.url.clone(), key: String::new() }, "POST", "/api/billing/register", Some(&json!({})))?;
+    if code == 404 {
+        return Ok(None);
+    }
+    match v.get("key").and_then(Value::as_str).filter(|k| !k.is_empty()) {
+        Some(k) if (200..300).contains(&code) => Ok(Some(k.to_string())),
+        _ => Err(format!("The Plaid server couldn't register Checken (it answered {code}).")),
+    }
+}
+
+/// The subscription, or None for a server without billing.
+pub fn billing_status(ep: &Endpoint) -> Result<Option<Billing>, String> {
+    if ep.key.is_empty() {
+        return Ok(None);
+    }
+    let (code, v) = send(ep, "GET", "/api/billing/status", None)?;
+    // An older server without billing doesn't have the page at all.
+    if code == 404 && v.is_string() {
+        return Ok(None);
+    }
+    answer(code, v).map(|v| Some(parse_billing(&v)))
+}
+
+/// Whether bank work may go ahead.
+#[derive(Clone, Debug)]
+pub enum Access {
+    Ready,
+    /// The server charges for Bank Sync and this Checken isn't subscribed.
+    NeedsSubscription(Billing),
+}
+
+/// Before any bank work: registers this copy of Checken with the server if
+/// it has no key yet (or the server no longer knows it), then checks the
+/// subscription. Returns a newly issued key, which the caller must keep.
+pub fn check_access(ep: &mut Endpoint) -> Result<(Access, Option<String>), String> {
+    if practicing() {
+        return Ok((Access::Ready, None));
+    }
+    let mut issued = None;
+    if ep.key.is_empty() {
+        match register(ep)? {
+            Some(k) => {
+                ep.key = k.clone();
+                issued = Some(k);
+            }
+            None => return Ok((Access::Ready, None)),
+        }
+    }
+    let status = match billing_status(ep) {
+        // Another server, or it lost its records: register again.
+        Err(e) if e.contains("CHECKEN_KEY_UNKNOWN") && issued.is_none() => {
+            ep.key.clear();
+            let Some(k) = register(ep)? else { return Ok((Access::Ready, None)) };
+            ep.key = k.clone();
+            issued = Some(k);
+            billing_status(ep)?
+        }
+        other => other?,
+    };
+    let access = match status {
+        Some(b) if b.enabled && !b.active => Access::NeedsSubscription(b),
+        _ => Access::Ready,
+    };
+    Ok((access, issued))
+}
+
+/// A Stripe Checkout page for subscribing (None: already subscribed).
+pub fn checkout_url(ep: &Endpoint) -> Result<Option<String>, String> {
+    let v = request(ep, "POST", "/api/billing/checkout", Some(&json!({})))?;
+    if v.get("already_active").and_then(Value::as_bool) == Some(true) {
+        return Ok(None);
+    }
+    v.get("url").and_then(Value::as_str).filter(|u| u.starts_with("https://")).map(|u| Some(u.to_string())).ok_or_else(|| "Stripe didn't give a payment page.".into())
+}
+
+/// Stripe's customer portal (change the card, invoices, cancel).
+pub fn portal_url(ep: &Endpoint) -> Result<String, String> {
+    let v = request(ep, "POST", "/api/billing/portal", Some(&json!({})))?;
+    v.get("url").and_then(Value::as_str).filter(|u| u.starts_with("https://")).map(str::to_string).ok_or_else(|| "Stripe didn't give a page to manage the subscription.".into())
+}
+
+/// Opens a web page in the person's browser (payments happen there, with Stripe).
+pub fn open_in_browser(url: &str) -> Result<(), String> {
+    if practicing() {
+        return Ok(());
+    }
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Not a web address.".into());
+    }
+    let r = if cfg!(target_os = "macos") {
+        std::process::Command::new("/usr/bin/open").arg(url).spawn()
+    } else if cfg!(windows) {
+        std::process::Command::new("rundll32.exe").args(["url.dll,FileProtocolHandler", url]).spawn()
+    } else {
+        std::process::Command::new("xdg-open").arg(url).spawn()
+    };
+    r.map(|_| ()).map_err(|e| format!("Couldn't open the browser ({e}). The page is {url}"))
+}
+
 /// A link token for Plaid Link, from the server.
-pub fn create_link_token(server: &str) -> Result<String, String> {
-    let v = request("POST", &format!("{server}/api/create_link_token"), Some(&json!({})))?;
+pub fn create_link_token(server: &Endpoint) -> Result<String, String> {
+    let v = request(server, "POST", "/api/create_link_token", Some(&json!({})))?;
     v.get("link_token").and_then(Value::as_str).map(str::to_string).ok_or_else(|| format!("The server didn't return a link token: {v}"))
 }
 
 /// Has the server swap Link's public token for an access token, which it
 /// keeps; Checken gets the connection's item id.
-pub fn exchange(server: &str, public_token: &str) -> Result<String, String> {
-    let v = request("POST", &format!("{server}/api/set_access_token"), Some(&json!({ "public_token": public_token })))?;
+pub fn exchange(server: &Endpoint, public_token: &str) -> Result<String, String> {
+    let v = request(server, "POST", "/api/set_access_token", Some(&json!({ "public_token": public_token })))?;
     v.get("item_id").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).ok_or_else(|| "The server didn't return the connection's id.".into())
 }
 
 /// The bank connections the server holds: (item id, bank name).
-pub fn server_items(server: &str) -> Result<Vec<(String, String)>, String> {
-    let v = request("GET", &format!("{server}/api/items"), None)?;
+pub fn server_items(server: &Endpoint) -> Result<Vec<(String, String)>, String> {
+    let v = request(server, "GET", "/api/items", None)?;
     let list = v.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
     Ok(list
         .iter()
@@ -234,11 +481,11 @@ pub fn server_items(server: &str) -> Result<Vec<(String, String)>, String> {
 }
 
 /// Disconnects a bank at Plaid; the server forgets its key.
-pub fn remove_item(server: &str, item_id: &str) -> Result<(), String> {
+pub fn remove_item(server: &Endpoint, item_id: &str) -> Result<(), String> {
     if practicing() {
         return Ok(());
     }
-    request("DELETE", &format!("{server}/api/items/{item_id}"), None).map(|_| ())
+    request(server, "DELETE", &format!("/api/items/{item_id}"), None).map(|_| ())
 }
 
 fn parse_accounts(v: &Value) -> Vec<BankAccount> {
@@ -295,8 +542,8 @@ impl BankAccount {
 }
 
 /// The accounts of a connection and the bank's name, from the server.
-pub fn accounts(server: &str, item_id: &str) -> Result<(Vec<BankAccount>, String), String> {
-    let v = request("GET", &format!("{server}/api/items/{item_id}/accounts"), None)?;
+pub fn accounts(server: &Endpoint, item_id: &str) -> Result<(Vec<BankAccount>, String), String> {
+    let v = request(server, "GET", &format!("/api/items/{item_id}/accounts"), None)?;
     let name = v.get("institution_name").and_then(Value::as_str).unwrap_or_default().to_string();
     Ok((parse_accounts(&v), name))
 }
@@ -377,8 +624,8 @@ fn parse_txn(t: &Value) -> BankTxn {
 /// Everything new for a connection since `cursor` (the server pages through
 /// Plaid's `/transactions/sync` and waits for a new connection's history),
 /// with current balances.
-pub fn sync(server: &str, item_id: &str, cursor: &str) -> Result<SyncResult, String> {
-    let v = request("POST", &format!("{server}/api/items/{item_id}/transactions/sync"), Some(&json!({ "cursor": cursor })))?;
+pub fn sync(server: &Endpoint, item_id: &str, cursor: &str) -> Result<SyncResult, String> {
+    let v = request(server, "POST", &format!("/api/items/{item_id}/transactions/sync"), Some(&json!({ "cursor": cursor })))?;
     let list = |k: &str| v.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
     Ok(SyncResult {
         added: list("added").iter().map(parse_txn).collect(),
@@ -671,6 +918,46 @@ handler.open();
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn curl_config_values_are_escaped() {
+        assert_eq!(curl_quote(r#"{"a":"b\c"}"#), r#""{\"a\":\"b\\c\"}""#);
+        assert_eq!(curl_quote("x\ny"), "\"x\\ny\"");
+    }
+
+    /// Against a real server with billing on (CHECKEN_TEST_SERVER=http://127.0.0.1:8123):
+    /// registers, sees no subscription, and is refused bank work with 402.
+    #[test]
+    #[ignore]
+    fn billing_against_a_test_server() {
+        let url = std::env::var("CHECKEN_TEST_SERVER").expect("CHECKEN_TEST_SERVER");
+        let mut ep = Endpoint { url, key: String::new() };
+        let (access, key) = check_access(&mut ep).unwrap();
+        assert!(key.is_some() && !ep.key.is_empty());
+        let Access::NeedsSubscription(b) = access else { panic!("expected a subscription to be needed") };
+        assert_eq!(b.price_text(), "$2.00/month");
+        let err = create_link_token(&ep).unwrap_err();
+        assert!(err.contains("SUBSCRIPTION_REQUIRED"), "{err}");
+        // A key the server doesn't know: Checken registers again.
+        ep.key = "forgotten".into();
+        let (_, again) = check_access(&mut ep).unwrap();
+        assert!(again.is_some());
+        // Bodies with quotes and backslashes reach the server intact.
+        let err = exchange(&ep, "a\"b\\c").unwrap_err();
+        assert!(err.contains("SUBSCRIPTION_REQUIRED"), "{err}");
+    }
+
+    #[test]
+    fn billing_lines_read_plainly() {
+        let mut b = Billing { enabled: true, amount_cents: 200, currency: "usd".into(), interval: "month".into(), status: "none".into(), ..Default::default() };
+        assert_eq!(b.price_text(), "$2.00/month");
+        assert_eq!(b.summary(), "Not subscribed. Bank Sync is $2.00/month.");
+        b.active = true;
+        b.status = "active".into();
+        assert_eq!(b.summary(), "Active, $2.00/month.");
+        b.enabled = false;
+        assert!(b.summary().starts_with("Free"));
+    }
 
     #[test]
     fn plaid_categories_become_checken_subcategories() {

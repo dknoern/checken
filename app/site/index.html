@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checken — Free personal finance for your desktop</title>
+  <meta name="description" content="Checken is a fast, free desktop app for your accounts, budgets and reports. Your data stays on your computer. Optional $2/month Bank Sync powered by Plaid.">
+  <meta property="og:title" content="Checken — Free personal finance for your desktop">
+  <meta property="og:description" content="Accounts, budgets and reports in a fast native app. Free, private, and yours. Optional Bank Sync for $2/month.">
+  <meta property="og:image" content="images/register.png">
+  <meta name="theme-color" content="#0f1b3d">
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="nav" id="top">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><img src="images/icon.png" alt="" width="34" height="34">Checken</a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#tour">Tour</a>
+      <a href="#compare">Why Checken</a>
+      <a href="#banksync">Bank Sync</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-small btn-light" href="#download">Download</a>
+  </div>
+</header>
+
+<main>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="dot"></span> Free · Private · Runs on your computer</p>
+      <h1>Your money,<br><span class="grad">powered&nbsp;up.</span></h1>
+      <p class="lead">
+        Checken is a powerful personal finance app that lives on your desktop, not in someone else's cloud.
+        Track every account, plan a budget, and see where your money goes — <strong>free to use, forever</strong>.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" id="hero-download" href="#download">Download Checken</a>
+        <a class="btn btn-ghost" href="#tour">Take the tour →</a>
+      </div>
+      <p class="hero-meta" id="hero-meta">For macOS, Windows and Linux</p>
+    </div>
+    <div class="hero-shot">
+      <div class="window">
+        <div class="window-bar"><i></i><i></i><i></i><span>Checken</span></div>
+        <img src="images/register.png" alt="Checken's All Transactions register, with accounts in the sidebar">
+      </div>
+      <img class="hero-mascot" src="images/mascot.png" alt="Checken's mascot, a chicken with a rocket pack" width="180" height="180">
+    </div>
+  </div>
+  <div class="wrap import-strip">
+    <span>Bring your history with you:</span>
+    <b>Quicken CSV</b><b>Mint.com CSV</b><b>Bank QFX / OFX</b><b>Checken backups</b>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="wrap">
+    <p class="kicker">Everything you need. Nothing you don't.</p>
+    <h2>A complete money manager, built to be fast.</h2>
+    <p class="sub">Checken is native code written in Rust. No web views, no sign-in, no waiting on a server: it opens straight to your money and keeps up as fast as you can type.</p>
+    <div class="grid3">
+      <article class="card feature">
+        <div class="ficon" style="--c:#2b62c4"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
+        <h3>All your accounts</h3>
+        <p>Checking, savings, credit cards, cash, investments and loans — grouped the way you think, with live balances and net worth.</p>
+      </article>
+      <article class="card feature">
+        <div class="ficon" style="--c:#0f9d76"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></div>
+        <h3>Budgets that keep you honest</h3>
+        <p>Plan each category for the month and watch progress bars turn orange, then red, before you overspend.</p>
+      </article>
+      <article class="card feature">
+        <div class="ficon" style="--c:#e8590c"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <h3>Reports at a glance</h3>
+        <p>Spending by category, income vs. expenses, net worth and comparisons — with charts, details, printing and export.</p>
+      </article>
+      <article class="card feature">
+        <div class="ficon" style="--c:#7048e8"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM15 15l4 4M19 15l-4 4"/></svg></div>
+        <h3>Categories your way</h3>
+        <p>Nest categories as deep as you like — <em>Auto&nbsp;›&nbsp;Fuel</em>, <em>Home&nbsp;›&nbsp;Utilities</em> — and totals roll up automatically.</p>
+      </article>
+      <article class="card feature">
+        <div class="ficon" style="--c:#c2255c"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg></div>
+        <h3>Switch in minutes</h3>
+        <p>Import Quicken and Mint exports or your bank's QFX/OFX files. Checken previews everything and catches duplicates first.</p>
+      </article>
+      <article class="card feature">
+        <div class="ficon" style="--c:#1c2b4a"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>Private by design</h3>
+        <p>No account, no tracking, no ads. Your data is one file on your own computer, saved automatically and easy to back up.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Tour -->
+<section class="section tour" id="tour">
+  <div class="wrap">
+    <p class="kicker">Take the tour</p>
+    <h2>See your whole financial picture.</h2>
+
+    <div class="row">
+      <div class="row-copy">
+        <h3>Home: the whole picture</h3>
+        <p>Net worth, this month's income and spending, what's left in your budget, where the money went, and your latest transactions — the moment Checken opens.</p>
+        <ul class="checks"><li>Net worth and month-over-month change</li><li>Top spending categories</li><li>Every account balance, one click away</li></ul>
+      </div>
+      <div class="row-shot window"><div class="window-bar"><i></i><i></i><i></i></div><img src="images/home.png" alt="Checken's Home screen with net worth, income, spending and account balances" loading="lazy"></div>
+    </div>
+
+    <div class="row flip">
+      <div class="row-copy">
+        <h3>Budgets that update as you spend</h3>
+        <p>Type a plan for each category, or start from last month's budget or last month's actual spending. Progress bars show exactly where you stand.</p>
+        <ul class="checks"><li>Monthly plans by category</li><li>Copy last month in one click</li><li>Income minus spending, always visible</li></ul>
+      </div>
+      <div class="row-shot window"><div class="window-bar"><i></i><i></i><i></i></div><img src="images/budget.png" alt="Checken's Budgets screen with progress bars for each category" loading="lazy"></div>
+    </div>
+
+    <div class="row">
+      <div class="row-copy">
+        <h3>Reports you'll actually read</h3>
+        <p>Open a saved report or a standard one, pick a date range, and get a clear chart with the details underneath. Edit what it shows, print it, or export it.</p>
+        <ul class="checks"><li>Budget, summary, comparison and net-worth reports</li><li>Any date range</li><li>Print and export</li></ul>
+      </div>
+      <div class="row-shot window"><div class="window-bar"><i></i><i></i><i></i></div><img src="images/report.png" alt="A Monthly Spending report in Checken with a bar chart by category" loading="lazy"></div>
+    </div>
+
+    <div class="row flip">
+      <div class="row-copy">
+        <h3>Organised the way you think</h3>
+        <p>Add, rename and nest categories, see how often each one is used, and keep income and expenses apart — your history follows every change.</p>
+        <ul class="checks"><li>Subcategories as deep as you need</li><li>Usage counts and this month's totals</li><li>Safe renames and deletes</li></ul>
+      </div>
+      <div class="row-shot window"><div class="window-bar"><i></i><i></i><i></i></div><img src="images/categories.png" alt="Checken's Categories screen" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section class="section" id="compare">
+  <div class="wrap narrow">
+    <p class="kicker">Why Checken</p>
+    <h2>Everything you liked about Quicken. Without the subscription.</h2>
+    <p class="sub">Checken does the everyday work of a desktop money manager — registers, budgets, reports, imports — in a lighter, faster native app that doesn't charge you every year to open your own data.</p>
+    <div class="table-wrap">
+      <table class="compare">
+        <thead><tr><th></th><th class="us"><img src="images/icon.png" alt="" width="22" height="22"> Checken</th><th>Quicken Classic<sup>*</sup></th></tr></thead>
+        <tbody>
+          <tr><td>Price to use</td><td class="us yes">Free, forever</td><td>Annual subscription</td></tr>
+          <tr><td>Bank downloads</td><td class="us yes">Optional, $2/month</td><td>Included in the subscription</td></tr>
+          <tr><td>Account or sign-in required</td><td class="us yes">No</td><td>Quicken ID required</td></tr>
+          <tr><td>macOS and Windows</td><td class="us yes">Yes</td><td>Yes</td></tr>
+          <tr><td>Linux</td><td class="us yes">Yes</td><td>No</td></tr>
+          <tr><td>Your data</td><td class="us yes">One open JSON file you own</td><td>Proprietary data file</td></tr>
+          <tr><td>Imports Quicken exports</td><td class="us yes">Yes — CSV and QFX/OFX</td><td>—</td></tr>
+          <tr><td>Built with</td><td class="us yes">Native Rust, no web views</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fineprint"><sup>*</sup> Based on Quicken Classic's publicly listed plans at the time of writing; check quicken.com for current details. Quicken is a trademark of Quicken Inc. Checken is independent and not affiliated with or endorsed by Quicken Inc.</p>
+  </div>
+</section>
+
+<!-- Bank Sync -->
+<section class="section banksync" id="banksync">
+  <div class="wrap">
+    <div class="bs-grid">
+      <div>
+        <p class="kicker light">Optional · Bank Sync</p>
+        <h2>Your bank's transactions,<br>one click away.</h2>
+        <p class="sub light">Checken is complete on its own. When you'd rather not type or import, turn on Bank Sync: Checken connects to thousands of US banks and card issuers through <strong>Plaid</strong> and downloads new transactions whenever you press&nbsp;⟳.</p>
+        <ol class="steps">
+          <li><b>Subscribe in your browser.</b> $2 a month through Stripe. Checken never sees your card.</li>
+          <li><b>Connect your bank with Plaid.</b> Sign in to your bank in Plaid's secure window; Checken never sees your bank password.</li>
+          <li><b>Press ⟳ (or ⌘R).</b> New transactions land in your accounts, categorised and matched against what you already have — no duplicates.</li>
+        </ol>
+        <ul class="trust">
+          <li>Bank access keys stay on the Bank Sync server, as Plaid recommends — never on your computer.</li>
+          <li>Your ledger still lives only on your computer.</li>
+          <li>Cancel anytime from <em>Bank Connections</em>; everything you downloaded stays yours.</li>
+        </ul>
+      </div>
+      <div class="bs-shot">
+        <img src="images/banksync.png" alt="Checken's Turn on Bank Sync window: $2.00/month, paid with Stripe" loading="lazy">
+        <p class="powered">Bank connections powered by <b>Plaid</b> · Payments by <b>Stripe</b></p>
+      </div>
+    </div>
+
+    <div class="pricing">
+      <div class="price-card">
+        <h3>Checken</h3>
+        <p class="price"><span>$0</span> forever</p>
+        <ul class="checks">
+          <li>Unlimited accounts and transactions</li>
+          <li>Budgets, reports and categories</li>
+          <li>Quicken, Mint, CSV and QFX/OFX import</li>
+          <li>Backups and restore</li>
+          <li>macOS, Windows and Linux</li>
+        </ul>
+        <a class="btn btn-dark" href="#download">Download free</a>
+      </div>
+      <div class="price-card featured">
+        <p class="badge">Optional add-on</p>
+        <h3>Bank Sync</h3>
+        <p class="price"><span>$2</span> / month</p>
+        <ul class="checks">
+          <li>Everything in Checken</li>
+          <li>Automatic downloads from your banks and cards</li>
+          <li>Connect as many institutions as you like</li>
+          <li>Powered by Plaid, billed by Stripe</li>
+          <li>Cancel anytime</li>
+        </ul>
+        <a class="btn btn-primary" href="#download">Get Checken, then turn it on</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="section download" id="download">
+  <div class="wrap">
+    <p class="kicker">Download</p>
+    <h2>Get Checken. It's free.</h2>
+    <p class="sub" id="dl-version">The latest build of Checken, made automatically from the source code.</p>
+    <div class="grid3 dl-grid">
+      <article class="card dl" data-os="mac">
+        <div class="os-icon"><svg viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.4 2-3.5 2-3.6-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.7zM14.1 5.6c.6-.8 1.1-1.8 1-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1 .1 2.1-.5 2.7-1.3z"/></svg></div>
+        <h3>macOS</h3>
+        <p>Apple silicon and Intel · macOS 11 or later</p>
+        <a class="btn btn-primary" href="downloads/Checken-mac.dmg" data-file="mac">Download .dmg</a>
+        <p class="meta" data-meta="mac"></p>
+      </article>
+      <article class="card dl" data-os="windows">
+        <div class="os-icon"><svg viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zM11.5 4.3L21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg></div>
+        <h3>Windows</h3>
+        <p>Windows 10 and 11 · 64-bit installer</p>
+        <a class="btn btn-primary" href="downloads/Checken-Setup-windows.exe" data-file="windows">Download installer</a>
+        <p class="meta" data-meta="windows"></p>
+      </article>
+      <article class="card dl" data-os="linux">
+        <div class="os-icon"><svg viewBox="0 0 24 24"><path d="M12 2c-2 0-3.2 1.7-3.2 4 0 1.3.3 2.2-.5 3.6C7.2 11.5 5 14 5.6 17c.3 1.4 1.5 1.6 2 2.3.6.9 1.1 2.7 4.4 2.7s3.8-1.8 4.4-2.7c.5-.7 1.7-.9 2-2.3.6-3-1.6-5.5-2.7-7.4-.8-1.4-.5-2.3-.5-3.6 0-2.3-1.2-4-3.2-4zm-1.3 4.2c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zm2.6 0c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1z"/></svg></div>
+        <h3>Linux</h3>
+        <p>x86-64 · Debian and Ubuntu package, or a portable archive</p>
+        <a class="btn btn-primary" href="downloads/checken-linux-amd64.deb" data-file="deb">Download .deb</a>
+        <a class="alt-link" href="downloads/Checken-linux-x86_64.tar.gz" data-file="tar">or the .tar.gz for any distribution</a>
+        <p class="meta" data-meta="deb"></p>
+      </article>
+    </div>
+    <div class="first-run">
+      <img src="images/mascot.png" alt="" width="96" height="96">
+      <div>
+        <h3>Opening Checken the first time</h3>
+        <p><b>macOS:</b> open the .dmg and drag Checken to Applications. Checken isn't notarized by Apple yet, so the first time, right-click it and choose <em>Open</em>.
+           <b>Windows:</b> if SmartScreen appears, choose <em>More info › Run anyway</em>.
+           <b>Linux:</b> <code>sudo apt install ./checken-linux-amd64.deb</code>, or unpack the archive and run <code>Checken</code>.</p>
+        <p>Checken opens with sample data so you can explore. When you're ready, start fresh and add your own accounts or import your history.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section faq" id="faq">
+  <div class="wrap narrow">
+    <p class="kicker">Questions</p>
+    <h2>Frequently asked</h2>
+    <details><summary>Is Checken really free?</summary><p>Yes. Everything that runs on your computer — accounts, transactions, budgets, reports, categories, imports and backups — is free to use with no time limit. Only the optional Bank Sync, which costs us real money per bank connection, is $2 a month.</p></details>
+    <details><summary>Where is my data kept?</summary><p>On your computer, in one file: <code>~/Library/Application Support/Checken/ledger.json</code> on a Mac, or <code>~/.checken/ledger.json</code> on Windows and Linux. It's saved automatically as you work, and <em>File › Save a Backup</em> keeps a copy anywhere you like.</p></details>
+    <details><summary>Can I move from Quicken or Mint?</summary><p>Yes. Export your transactions from Quicken (CSV) or Mint (CSV), or download QFX/OFX files from your bank, then use <em>File › Import</em>. Checken shows a preview, puts each account's transactions in the right place, and skips duplicates.</p></details>
+    <details><summary>How does Bank Sync keep my bank login safe?</summary><p>You sign in to your bank inside Plaid's own secure window — Checken never sees your bank username or password. Plaid gives the Bank Sync server an access key, which stays on the server; Checken only knows an anonymous id for each connection.</p></details>
+    <details><summary>What happens if I cancel Bank Sync?</summary><p>Checken keeps working exactly as before, with every transaction you've already downloaded. Bank downloads simply stop until you subscribe again. You can cancel anytime from <em>Bank Connections › Manage Subscription</em>.</p></details>
+    <details><summary>Which banks does Bank Sync support?</summary><p>Most banks, credit unions and card issuers in the United States that Plaid supports. You'll find yours by name when you connect.</p></details>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="cta">
+  <div class="wrap cta-inner">
+    <h2>Take control of your money today.</h2>
+    <p>Free to download. Free to use. Yours to keep.</p>
+    <a class="btn btn-primary btn-big" href="#download" id="cta-download">Download Checken</a>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap foot-inner">
+    <div>
+      <a class="brand" href="#top"><img src="images/icon.png" alt="" width="28" height="28">Checken</a>
+      <p>Powering up your personal finance.</p>
+    </div>
+    <div class="foot-links">
+      <a href="#features">Features</a>
+      <a href="#banksync">Bank Sync</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/dknoern/checken">Source on GitHub</a>
+    </div>
+  </div>
+  <div class="wrap legal">
+    <p>© <span id="year">2026</span> Checken. Quicken and Mint are trademarks of their respective owners and are named only to describe compatible files; Checken is not affiliated with or endorsed by them. Bank connections are provided by Plaid Inc. and payments are processed by Stripe, Inc.</p>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
