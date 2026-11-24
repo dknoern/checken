@@ -95,21 +95,17 @@ jobs:
   # build. Runs for pushes to main (and manual runs on main).
   # One-time setup: Settings → Pages → Build and deployment → Source:
   # "GitHub Actions". The site is then at https://<owner>.github.io/<repo>/.
+  #
+  # Two jobs, as GitHub's own Pages template does: the deploy step reads the
+  # site artifact back through GitHub's API, and asked in the same job right
+  # after the upload it may not see it yet ("No artifacts named github-pages").
   website:
-    name: Publish website (GitHub Pages)
+    name: Build website
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [macos, windows-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     defaults:
       run:
         working-directory: .
@@ -124,11 +120,25 @@ jobs:
       - name: Put the site and the latest downloads together
         run: ./app/site/assemble.sh artifacts _site
 
-      - uses: actions/configure-pages@v5
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  website-deploy:
+    name: Publish website (GitHub Pages)
+    needs: website
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
 
       - id: deployment
         uses: actions/deploy-pages@v4
